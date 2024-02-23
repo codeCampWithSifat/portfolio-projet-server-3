@@ -4,6 +4,7 @@ const app = express();
 require("dotenv").config();
 const port = process.env.PORT || 4000;
 const cors = require("cors");
+const jwt = require("jsonwebtoken");
 
 // use all the middleware
 app.use(express.json());
@@ -25,6 +26,43 @@ async function run() {
     await client.connect();
 
     const userCollection = client.db("PORTFOLIO-SERVER-3").collection("users");
+    const donationCollection = client
+      .db("PORTFOLIO-SERVER-3")
+      .collection("donations");
+
+    const verifyToken = (req, res, next) => {
+      if (!req.headers.authorization) {
+        return res.status(401).send({ message: "Forbidden Access" });
+      }
+      const token = req.headers.authorization.split(" ")[1];
+      jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (error, decoded) => {
+        if (error) {
+          return res.status(401).send({ message: "Forbidden Access" });
+        }
+        req.decoded = decoded;
+        next();
+      });
+    };
+
+    const verifyAdmin = async (req, res, next) => {
+      const email = req.decoded.email;
+      const query = { email: email };
+      const user = await userCollection.findOne(query);
+      const isAdmin = user.role === "admin";
+      if (!isAdmin) {
+        return res.status(403).send({ message: "forbidden access" });
+      }
+      next();
+    };
+
+    // jwt related api
+    app.post("/jwt", (req, res) => {
+      const user = req.body;
+      const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, {
+        expiresIn: "1d",
+      });
+      res.send({ token });
+    });
 
     // users related  api
     app.post("/users", async (req, res) => {
@@ -71,6 +109,149 @@ async function run() {
       // Update the first document that matches the filter
       const result = await userCollection.updateOne(filter, updateDoc, options);
       res.send(result);
+    });
+
+    // donations related api
+    app.post("/donations", async (req, res) => {
+      const data = req.body;
+      const result = await donationCollection.insertOne(data);
+      res.send(result);
+    });
+
+    app.get("/donations", async (req, res) => {
+      const donorEmail = req.query.email;
+      const page = Number(req.query.page);
+      const size = Number(req.query.size);
+      const skip = page * size;
+      const query = { donorEmail: donorEmail };
+      const result = await donationCollection
+        .find(query)
+        .skip(skip)
+        .limit(size)
+        .toArray();
+      res.send(result);
+    });
+
+    app.get("/donations/pagination", async (req, res) => {
+      const donorEmail = req.query.email;
+      const query = { donorEmail: donorEmail };
+      const page = Number(req.query.page);
+      const size = Number(req.query.size);
+      const skip = page * size;
+      const result = await donationCollection
+        .find(query)
+        .skip(skip)
+        .limit(size)
+        .toArray();
+      res.send(result);
+    });
+
+    app.get("/countDonations", async (req, res) => {
+      const count = await donationCollection.estimatedDocumentCount();
+      res.send({ count });
+    });
+
+    app.get("/donations/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await donationCollection.findOne(query);
+      res.send(result);
+    });
+
+    app.patch("/donations/:id", async (req, res) => {
+      const id = req.params.id;
+      const filter = { _id: new ObjectId(id) };
+      const data = req.body;
+      const options = { upsert: true };
+      const updateDoc = {
+        $set: {
+          recipientName: data.recipientName,
+          district: data.district,
+          upazila: data.upazila,
+          hospitalName: data.hospitalName,
+          address: data.address,
+          date: data.date,
+          time: data.time,
+          message: data.message,
+          status: data.status,
+        },
+      };
+      // Update the first document that matches the filter
+      const result = await donationCollection.updateOne(
+        filter,
+        updateDoc,
+        options
+      );
+      res.send(result);
+    });
+
+    app.delete("/donations/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await donationCollection.deleteOne(query);
+      res.send(result);
+    });
+
+    // users related api
+    app.get("/allusers", verifyToken, verifyAdmin, async (req, res) => {
+      const result = await userCollection.find().toArray();
+      res.send(result);
+    });
+
+    app.patch("/users/admin/:id", async (req, res) => {
+      const id = req.params.id;
+      const filter = { _id: new ObjectId(id) };
+      const options = { upsert: true };
+      const updateDoc = {
+        $set: {
+          role: "admin",
+        },
+      };
+      const result = await userCollection.updateOne(filter, updateDoc, options);
+      res.send(result);
+    });
+
+    app.patch("/users/admin/status/active/:id", async (req, res) => {
+      const id = req.params.id;
+      const filter = { _id: new ObjectId(id) };
+      const options = { upsert: true };
+      const updateDoc = {
+        $set: {
+          status: "active",
+        },
+      };
+      const result = await userCollection.updateOne(filter, updateDoc, options);
+      res.send(result);
+    });
+
+    app.patch("/users/admin/status/block/:id", async (req, res) => {
+      const id = req.params.id;
+      const filter = { _id: new ObjectId(id) };
+      const options = { upsert: true };
+      const updateDoc = {
+        $set: {
+          status: "block",
+        },
+      };
+      const result = await userCollection.updateOne(filter, updateDoc, options);
+      res.send(result);
+    });
+
+    // admin api
+    app.get("/users/admin/:email", verifyToken, async (req, res) => {
+      const email = req.params.email;
+
+      if (email !== req.decoded.email) {
+        return res.status(403).send({ message: "forbidden access" });
+      }
+
+      const query = { email: email };
+      const user = await userCollection.findOne(query);
+      let admin = false;
+      if (user) {
+        admin = user?.role === "admin";
+      }
+      res.send({ admin });
     });
 
     await client.db("admin").command({ ping: 1 });
