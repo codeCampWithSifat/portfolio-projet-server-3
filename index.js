@@ -71,10 +71,10 @@ async function run() {
       res.send(result);
     });
 
-    app.get("/users", async (req, res) => {
-      const result = await userCollection.find().toArray();
-      res.send(result);
-    });
+    // app.get("/users", async (req, res) => {
+    //   const result = await userCollection.find().toArray();
+    //   res.send(result);
+    // });
 
     app.get("/user", async (req, res) => {
       const email = req.query.email;
@@ -118,7 +118,7 @@ async function run() {
       res.send(result);
     });
 
-    app.get("/donations", async (req, res) => {
+    app.get("/donations", verifyToken, async (req, res) => {
       const donorEmail = req.query.email;
       const page = Number(req.query.page);
       const size = Number(req.query.size);
@@ -132,7 +132,7 @@ async function run() {
       res.send(result);
     });
 
-    app.get("/donations/pagination", async (req, res) => {
+    app.get("/donations/pagination", verifyToken, async (req, res) => {
       const donorEmail = req.query.email;
       const query = { donorEmail: donorEmail };
       const page = Number(req.query.page);
@@ -147,18 +147,39 @@ async function run() {
     });
 
     app.get("/countDonations", async (req, res) => {
+      // const email = req.query.email;
+      // const query = { email: email };
       const count = await donationCollection.estimatedDocumentCount();
       res.send({ count });
     });
 
-    app.get("/donations/:id", async (req, res) => {
+    // app.get("/donationCounter", async (req, res) => {
+    //   const email = req.query.donorEmail;
+    //   const query = { email: email };
+    //   const additionalParam = req.query.additionalParam;
+    //   const count = await donationCollection.estimatedDocumentCount({
+    //     query,
+    //     additionalParam,
+    //   });
+    //   res.send({ count });
+    // });
+
+    app.get("/donationCounter", async (req, res) => {
+      const email = req.query.email;
+      const query = { email: email };
+      const movie = await userCollection.findOne(query);
+      const count = await donationCollection.estimatedDocumentCount(movie);
+      res.send({ count });
+    });
+
+    app.get("/donations/:id", verifyToken, async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
       const result = await donationCollection.findOne(query);
       res.send(result);
     });
 
-    app.patch("/donations/:id", async (req, res) => {
+    app.patch("/donations/:id", verifyToken, async (req, res) => {
       const id = req.params.id;
       const filter = { _id: new ObjectId(id) };
       const data = req.body;
@@ -185,7 +206,7 @@ async function run() {
       res.send(result);
     });
 
-    app.delete("/donations/:id", async (req, res) => {
+    app.delete("/donations/:id", verifyToken, async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
       const result = await donationCollection.deleteOne(query);
@@ -193,49 +214,116 @@ async function run() {
     });
 
     // users related api
-    app.get("/allusers", verifyToken, verifyAdmin, async (req, res) => {
-      const result = await userCollection.find().toArray();
+    app.get("/allUsers", verifyToken, verifyAdmin, async (req, res) => {
+      const page = Number(req.query.page);
+      const size = Number(req.query.size);
+      const skip = page * size;
+      const result = await userCollection
+        .find()
+        .skip(skip)
+        .limit(size)
+        .toArray();
       res.send(result);
     });
 
-    app.patch("/users/admin/:id", async (req, res) => {
-      const id = req.params.id;
-      const filter = { _id: new ObjectId(id) };
-      const options = { upsert: true };
-      const updateDoc = {
-        $set: {
-          role: "admin",
-        },
-      };
-      const result = await userCollection.updateOne(filter, updateDoc, options);
-      res.send(result);
+    app.get("/totalUser", async (req, res) => {
+      const count = await userCollection.estimatedDocumentCount();
+      res.send({ count });
     });
 
-    app.patch("/users/admin/status/active/:id", async (req, res) => {
-      const id = req.params.id;
-      const filter = { _id: new ObjectId(id) };
-      const options = { upsert: true };
-      const updateDoc = {
-        $set: {
-          status: "active",
-        },
-      };
-      const result = await userCollection.updateOne(filter, updateDoc, options);
-      res.send(result);
-    });
+    app.patch(
+      "/users/admin/:id",
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        const id = req.params.id;
+        const filter = { _id: new ObjectId(id) };
+        const options = { upsert: true };
+        const updateDoc = {
+          $set: {
+            role: "admin",
+          },
+        };
+        const result = await userCollection.updateOne(
+          filter,
+          updateDoc,
+          options
+        );
+        res.send(result);
+      }
+    );
 
-    app.patch("/users/admin/status/block/:id", async (req, res) => {
-      const id = req.params.id;
-      const filter = { _id: new ObjectId(id) };
-      const options = { upsert: true };
-      const updateDoc = {
-        $set: {
-          status: "block",
-        },
-      };
-      const result = await userCollection.updateOne(filter, updateDoc, options);
-      res.send(result);
-    });
+    app.patch(
+      "/users/admin/status/active/:id",
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        const id = req.params.id;
+        const filter = { _id: new ObjectId(id) };
+        const options = { upsert: true };
+        const updateDoc = {
+          $set: {
+            status: "active",
+          },
+        };
+        const result = await userCollection.updateOne(
+          filter,
+          updateDoc,
+          options
+        );
+        res.send(result);
+      }
+    );
+
+    app.patch(
+      "/users/admin/status/block/:id",
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        const id = req.params.id;
+        const filter = { _id: new ObjectId(id) };
+        const options = { upsert: true };
+        const updateDoc = {
+          $set: {
+            status: "block",
+          },
+        };
+        const result = await userCollection.updateOne(
+          filter,
+          updateDoc,
+          options
+        );
+        res.send(result);
+      }
+    );
+
+    app.get(
+      "/admin/allBloodDonation",
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        const page = Number(req.query.page);
+        const size = Number(req.query.size);
+        const skip = page * size;
+        const result = await donationCollection
+          .find()
+          .skip(skip)
+          .limit(size)
+          .toArray();
+        // console.log(req.query);
+        res.send(result);
+      }
+    );
+
+    app.get(
+      "/admin/donationCount",
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        const count = await donationCollection.estimatedDocumentCount();
+        res.send({ count });
+      }
+    );
 
     // admin api
     app.get("/users/admin/:email", verifyToken, async (req, res) => {
