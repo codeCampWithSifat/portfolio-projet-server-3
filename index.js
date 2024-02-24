@@ -26,6 +26,7 @@ async function run() {
     await client.connect();
 
     const userCollection = client.db("PORTFOLIO-SERVER-3").collection("users");
+    const blogCollection = client.db("PORTFOLIO-SERVER-3").collection("blogs");
     const donationCollection = client
       .db("PORTFOLIO-SERVER-3")
       .collection("donations");
@@ -341,6 +342,109 @@ async function run() {
       }
       res.send({ admin });
     });
+
+    // blog related api
+    app.post("/users/add-blog", verifyToken, async (req, res) => {
+      const data = req.body;
+      const result = await blogCollection.insertOne(data);
+      res.send(result);
+    });
+
+    app.get("/users/add-blog", verifyToken, verifyAdmin, async (req, res) => {
+      const result = await blogCollection.find().toArray();
+      res.send(result);
+    });
+
+    app.get("/users/add-blog/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await blogCollection.findOne(query);
+      res.send(result);
+    });
+
+    app.patch(
+      "/users/add-blog/:id",
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        const id = req.params.id;
+        const data = req.body;
+        const filter = { _id: new ObjectId(id) };
+        const options = { upsert: true };
+        const updateDoc = {
+          $set: {
+            name: data.name,
+            email: data.email,
+            title: data.title,
+            image: data.image,
+            text: data.text,
+            status: data.status,
+          },
+        };
+        const result = await blogCollection.updateOne(
+          filter,
+          updateDoc,
+          options
+        );
+        res.send(result);
+      }
+    );
+
+    app.delete(
+      "/users/add-blog/:id",
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        const id = req.params.id;
+        const query = { _id: new ObjectId(id) };
+        const result = await blogCollection.deleteOne(query);
+        res.send(result);
+      }
+    );
+
+    app.patch(
+      "/users/add-blog/published/:id",
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        const id = req.params.id;
+        const filter = { _id: new ObjectId(id) };
+        const options = { upsert: true };
+        const updateDoc = {
+          $set: {
+            status: "published",
+          },
+        };
+        const result = await blogCollection.updateOne(
+          filter,
+          updateDoc,
+          options
+        );
+        res.send(result);
+      }
+    );
+
+    app.patch(
+      "/users/add-blog/unPublished/:id",
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        const id = req.params.id;
+        const filter = { _id: new ObjectId(id) };
+        const options = { upsert: true };
+        const updateDoc = {
+          $set: {
+            status: "unPublished",
+          },
+        };
+        const result = await blogCollection.updateOne(
+          filter,
+          updateDoc,
+          options
+        );
+        res.send(result);
+      }
+    );
 
     await client.db("admin").command({ ping: 1 });
     console.log(
