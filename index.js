@@ -72,11 +72,6 @@ async function run() {
       res.send(result);
     });
 
-    // app.get("/users", async (req, res) => {
-    //   const result = await userCollection.find().toArray();
-    //   res.send(result);
-    // });
-
     app.get("/user", async (req, res) => {
       const email = req.query.email;
       const query = { email: email };
@@ -153,17 +148,6 @@ async function run() {
       const count = await donationCollection.estimatedDocumentCount();
       res.send({ count });
     });
-
-    // app.get("/donationCounter", async (req, res) => {
-    //   const email = req.query.donorEmail;
-    //   const query = { email: email };
-    //   const additionalParam = req.query.additionalParam;
-    //   const count = await donationCollection.estimatedDocumentCount({
-    //     query,
-    //     additionalParam,
-    //   });
-    //   res.send({ count });
-    // });
 
     app.get("/donationCounter", async (req, res) => {
       const email = req.query.email;
@@ -350,7 +334,7 @@ async function run() {
       res.send(result);
     });
 
-    app.get("/users/add-blog", verifyToken, verifyAdmin, async (req, res) => {
+    app.get("/users/add-blog", async (req, res) => {
       const result = await blogCollection.find().toArray();
       res.send(result);
     });
@@ -445,6 +429,18 @@ async function run() {
         res.send(result);
       }
     );
+
+    // Total Number Of Users
+    app.get("/users/usersState", async (req, res) => {
+      const users = await userCollection.estimatedDocumentCount();
+      const donations = await donationCollection.estimatedDocumentCount();
+      res.send({ users, donations });
+    });
+
+    app.get("/users/blogPublic", async (req, res) => {
+      const result = await blogCollection.find().toArray();
+      res.send(result);
+    });
 
     await client.db("admin").command({ ping: 1 });
     console.log(
