@@ -5,6 +5,7 @@ require("dotenv").config();
 const port = process.env.PORT || 4000;
 const cors = require("cors");
 const jwt = require("jsonwebtoken");
+const stripe = require("stripe")(process.env.PAYMENT_SECRET_KEY);
 
 // use all the middleware
 app.use(express.json());
@@ -27,6 +28,12 @@ async function run() {
 
     const userCollection = client.db("PORTFOLIO-SERVER-3").collection("users");
     const blogCollection = client.db("PORTFOLIO-SERVER-3").collection("blogs");
+    const amountCollectionDone = client
+      .db("PORTFOLIO-SERVER-3")
+      .collection("amountsDone");
+    const amountCollection = client
+      .db("PORTFOLIO-SERVER-3")
+      .collection("amounts");
     const donationCollection = client
       .db("PORTFOLIO-SERVER-3")
       .collection("donations");
@@ -104,6 +111,38 @@ async function run() {
       };
       // Update the first document that matches the filter
       const result = await userCollection.updateOne(filter, updateDoc, options);
+      res.send(result);
+    });
+
+    // payment related api
+    app.post("/create-payment-intent", async (req, res) => {
+      const { price } = req.body;
+      const amount = parseInt(price * 100);
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount: amount,
+        currency: "usd",
+        payment_method_types: ["card"],
+      });
+      res.send({
+        clientSecret: paymentIntent.client_secret,
+      });
+    });
+
+    app.post("/payments", verifyToken, async (req, res) => {
+      const payment = req.body;
+      // console.log("payments", payment);
+      const result = await amountCollectionDone.insertOne(payment);
+      await amountCollection.deleteMany();
+      res.send(result);
+    });
+
+    app.get("/payments/:email", verifyToken, async (req, res) => {
+      const email = req.params.email;
+      const query = { email: email };
+      if (email !== req.decoded.email) {
+        return res.status(403).send({ message: "Forbidden Access" });
+      }
+      const result = await amountCollection.find(query).toArray();
       res.send(result);
     });
 
@@ -434,13 +473,48 @@ async function run() {
     app.get("/users/usersState", async (req, res) => {
       const users = await userCollection.estimatedDocumentCount();
       const donations = await donationCollection.estimatedDocumentCount();
-      res.send({ users, donations });
+      const totalDonationsAmount = await amountCollectionDone
+        .aggregate([
+          {
+            $group: {
+              _id: null,
+              totalRevenue: { $sum: "$price" },
+            },
+          },
+        ])
+        .toArray();
+
+      const revenue =
+        totalDonationsAmount.length > 0
+          ? totalDonationsAmount[0].totalRevenue
+          : 0;
+
+      res.send({ users, donations, revenue });
     });
 
     app.get("/users/blogPublic", async (req, res) => {
       const result = await blogCollection.find().toArray();
       res.send(result);
     });
+
+    app.post("/users/payAmountDonation", verifyToken, async (req, res) => {
+      const data = req.body;
+      const result = await amountCollection.insertOne(data);
+      res.send(result);
+    });
+
+    app.get(
+      "/users/paymentAmountDonationDone",
+      verifyToken,
+      async (req, res) => {
+        const email = req.query.email;
+        const query = { email: email };
+        const result = await amountCollectionDone.find(query).toArray();
+        res.send(result);
+      }
+    );
+
+    // Payment Related Api Payment Intent
 
     await client.db("admin").command({ ping: 1 });
     console.log(
